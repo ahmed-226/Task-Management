@@ -1,0 +1,77 @@
+@host = http://localhost:3000
+@token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2OTUyYzI4ODFmOWU2NWNlMjFkYTg4ZmQiLCJlbWFpbCI6InRlc3RAZXhhbXBsZS5jb20iLCJpYXQiOjE3NjcwMzE0MzIsImV4cCI6MTc2NzAzNTAzMn0.o3uIaQiS6DUzoBV8S9VO5ozBcI4fYOb2Kzm2Id_zLJQ
+
+###
+# User Registration
+# Creates a new user and saves the token
+POST {{host}}/api/users/register
+Content-Type: application/json
+
+{
+    "username": "testuser",
+    "email": "test@example.com",
+    "password": "password123"
+}
+
+###
+
+> {%
+    client.global.set("token", response.body.token);
+%}
+
+###
+# User Login
+# Logs in and saves the token
+POST {{host}}/api/users/login
+Content-Type: application/json
+
+{
+    "email": "test@example.com",
+    "password": "password123"
+}
+
+> {%
+    client.global.set("token", response.body.token);
+%}
+
+###
+# Create a new task
+# @name createTask
+POST {{host}}/api/tasks
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+    "title": "My First Task",
+    "description": "This is a test task created via API."
+}
+
+> {%
+    client.global.set("taskId", response.body._id);
+%}
+
+###
+# Get all tasks for the logged-in user
+GET {{host}}/api/tasks
+Authorization: Bearer {{token}}
+
+###
+# Get a single task by its ID
+GET {{host}}/api/tasks/{{taskId}}
+Authorization: Bearer {{token}}
+
+###
+# Update a task
+PUT {{host}}/api/tasks/{{taskId}}
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+    "status": "in-progress",
+    "description": "This task has been updated."
+}
+
+###
+# Delete a task
+DELETE {{host}}/api/tasks/{{taskId}}
+Authorization: Bearer {{token}}
