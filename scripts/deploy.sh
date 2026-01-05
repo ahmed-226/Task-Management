@@ -5,7 +5,10 @@ set -e
 
 # Configuration
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-K8S_DIR="$PROJECT_ROOT/k8s"
+HELM_CHART="$PROJECT_ROOT/helm/task-management"
+RELEASE_NAME="${RELEASE_NAME:-task-management}"
+NAMESPACE="${NAMESPACE:-default}"
+ENVIRONMENT="${ENVIRONMENT:-dev}"
 
 # Colors for output
 GREEN='\033[0;32m'
@@ -15,13 +18,25 @@ RED='\033[0;31m'
 NC='\033[0m' # No Color
 
 echo -e "${BLUE}========================================${NC}"
-echo -e "${BLUE}Task Management - K8s Deployment${NC}"
+echo -e "${BLUE}Task Management - Helm Deployment${NC}"
 echo -e "${BLUE}========================================${NC}"
+echo ""
+echo -e "${YELLOW}Configuration:${NC}"
+echo -e "  Release Name: ${RELEASE_NAME}"
+echo -e "  Namespace: ${NAMESPACE}"
+echo -e "  Environment: ${ENVIRONMENT}"
 echo ""
 
 # Check if kubectl is installed
 if ! command -v kubectl &> /dev/null; then
     echo -e "${RED}Error: kubectl is not installed${NC}"
+    exit 1
+fi
+
+# Check if helm is installed
+if ! command -v helm &> /dev/null; then
+    echo -e "${RED}Error: helm is not installed${NC}"
+    echo -e "${YELLOW}Install Helm: https://helm.sh/docs/intro/install/${NC}"
     exit 1
 fi
 
@@ -33,97 +48,153 @@ if ! kubectl cluster-info &> /dev/null; then
 fi
 
 echo -e "${GREEN}✓ Connected to Kubernetes cluster${NC}"
+echo -e "${GREEN}✓ Helm is available${NC}"
 echo ""
 
-# Function to wait for deployment
-wait_for_deployment() {
-    local deployment=$1
-    local namespace=${2:-default}
-    echo -e "${BLUE}Waiting for $deployment to be ready...${NC}"
-    kubectl wait --for=condition=available --timeout=300s deployment/$deployment -n $namespace
-}
+# Parse arguments
+ACTION="install"
+DRY_RUN=false
 
-# Function to wait for statefulset
-wait_for_statefulset() {
-    local statefulset=$1
-    local namespace=${2:-default}
-    echo -e "${BLUE}Waiting for $statefulset to be ready...${NC}"
-    kubectl wait --for=condition=ready --timeout=300s pod -l component=mongodb -n $namespace
-}
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --upgrade)
+            ACTION="upgrade"
+            shift
+            ;;
+        --uninstall)
+            ACTION="uninstall"
+            shift
+            ;;
+        --dry-run)
+            DRY_RUN=true
+            shift
+            ;;
+        --prod)
+            ENVIRONMENT="prod"
+            shift
+            ;;
+        --dev)
+            ENVIRONMENT="dev"
+            shift
+            ;;
+        --namespace)
+            NAMESPACE="$2"
+            shift 2
+            ;;
+        --help)
+            echo "Usage: $0 [options]"
+            echo ""
+            echo "Options:"
+            echo "  --upgrade      Upgrade existing release"
+            echo "  --uninstall    Uninstall the release"
+            echo "  --dry-run      Simulate the deployment"
+            echo "  --dev          Use development values (default)"
+            echo "  --prod         Use production values"
+            echo "  --namespace    Kubernetes namespace (default: default)"
+            echo "  --help         Show this help message"
+            exit 0
+            ;;
+        *)
+            echo -e "${RED}Unknown option: $1${NC}"
+            exit 1
+            ;;
+    esac
+done
 
-# Deploy MongoDB
-echo -e "${BLUE}========================================${NC}"
-echo -e "${BLUE}Deploying MongoDB...${NC}"
-echo -e "${BLUE}========================================${NC}"
-kubectl apply -f "$K8S_DIR/mongodb/service.yaml"
-kubectl apply -f "$K8S_DIR/mongodb/deployment.yaml"
-wait_for_statefulset "mongodb"
-echo -e "${GREEN}✓ MongoDB deployed successfully${NC}"
-echo ""
+# Select values file based on environment
+VALUES_FILE="$HELM_CHART/values-${ENVIRONMENT}.yaml"
+if [[ ! -f "$VALUES_FILE" ]]; then
+    VALUES_FILE="$HELM_CHART/values.yaml"
+    echo -e "${YELLOW}Using default values.yaml${NC}"
+else
+    echo -e "${BLUE}Using values file: values-${ENVIRONMENT}.yaml${NC}"
+fi
 
-# Deploy Server
-echo -e "${BLUE}========================================${NC}"
-echo -e "${BLUE}Deploying Server...${NC}"
-echo -e "${BLUE}========================================${NC}"
-kubectl apply -f "$K8S_DIR/server/configmap.yaml"
-kubectl apply -f "$K8S_DIR/server/secret.yaml"
-kubectl apply -f "$K8S_DIR/server/deployment.yaml"
-kubectl apply -f "$K8S_DIR/server/service.yaml"
-wait_for_deployment "server-deployment"
-echo -e "${GREEN}✓ Server deployed successfully${NC}"
-echo ""
+# Create namespace if it doesn't exist
+if [[ "$NAMESPACE" != "default" ]]; then
+    kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
+fi
 
-# Deploy Client
-echo -e "${BLUE}========================================${NC}"
-echo -e "${BLUE}Deploying Client...${NC}"
-echo -e "${BLUE}========================================${NC}"
-kubectl apply -f "$K8S_DIR/client/configmap.yaml"
-kubectl apply -f "$K8S_DIR/client/deployment.yaml"
-kubectl apply -f "$K8S_DIR/client/service.yaml"
-wait_for_deployment "client-deployment"
-echo -e "${GREEN}✓ Client deployed successfully${NC}"
-echo ""
+# Build Helm command
+HELM_CMD=""
+case $ACTION in
+    install)
+        echo -e "${BLUE}========================================${NC}"
+        echo -e "${BLUE}Installing Task Management...${NC}"
+        echo -e "${BLUE}========================================${NC}"
+        HELM_CMD="helm install $RELEASE_NAME $HELM_CHART -f $VALUES_FILE -n $NAMESPACE"
+        
+        # Check if release already exists
+        if helm status $RELEASE_NAME -n $NAMESPACE &> /dev/null; then
+            echo -e "${YELLOW}Release already exists, upgrading instead...${NC}"
+            HELM_CMD="helm upgrade $RELEASE_NAME $HELM_CHART -f $VALUES_FILE -n $NAMESPACE"
+        fi
+        ;;
+    upgrade)
+        echo -e "${BLUE}========================================${NC}"
+        echo -e "${BLUE}Upgrading Task Management...${NC}"
+        echo -e "${BLUE}========================================${NC}"
+        HELM_CMD="helm upgrade $RELEASE_NAME $HELM_CHART -f $VALUES_FILE -n $NAMESPACE"
+        ;;
+    uninstall)
+        echo -e "${BLUE}========================================${NC}"
+        echo -e "${BLUE}Uninstalling Task Management...${NC}"
+        echo -e "${BLUE}========================================${NC}"
+        helm uninstall $RELEASE_NAME -n $NAMESPACE
+        echo -e "${GREEN}✓ Release uninstalled successfully${NC}"
+        exit 0
+        ;;
+esac
 
-# Deploy Ingress
-echo -e "${BLUE}========================================${NC}"
-echo -e "${BLUE}Deploying Ingress...${NC}"
-echo -e "${BLUE}========================================${NC}"
-kubectl apply -f "$K8S_DIR/ingress/ingress.yaml"
-echo -e "${GREEN}✓ Ingress deployed successfully${NC}"
-echo ""
+# Add dry-run flag if requested
+if [[ "$DRY_RUN" == "true" ]]; then
+    HELM_CMD="$HELM_CMD --dry-run --debug"
+    echo -e "${YELLOW}Running in dry-run mode...${NC}"
+fi
 
-# Display deployment status
-echo -e "${BLUE}========================================${NC}"
-echo -e "${BLUE}Deployment Status${NC}"
-echo -e "${BLUE}========================================${NC}"
+# Execute Helm command
 echo ""
+eval $HELM_CMD
 
-echo -e "${YELLOW}Pods:${NC}"
-kubectl get pods -l app=task-management
-echo ""
+if [[ "$DRY_RUN" == "false" ]]; then
+    echo ""
+    echo -e "${BLUE}========================================${NC}"
+    echo -e "${BLUE}Waiting for pods to be ready...${NC}"
+    echo -e "${BLUE}========================================${NC}"
+    
+    # Wait for deployments
+    kubectl wait --for=condition=available --timeout=300s deployment -l app.kubernetes.io/instance=$RELEASE_NAME -n $NAMESPACE 2>/dev/null || true
+    
+    echo ""
+    echo -e "${BLUE}========================================${NC}"
+    echo -e "${BLUE}Deployment Status${NC}"
+    echo -e "${BLUE}========================================${NC}"
+    echo ""
 
-echo -e "${YELLOW}Services:${NC}"
-kubectl get svc -l app=task-management
-echo ""
+    echo -e "${YELLOW}Pods:${NC}"
+    kubectl get pods -l app.kubernetes.io/instance=$RELEASE_NAME -n $NAMESPACE
+    echo ""
 
-echo -e "${YELLOW}Ingress:${NC}"
-kubectl get ingress
-echo ""
+    echo -e "${YELLOW}Services:${NC}"
+    kubectl get svc -l app.kubernetes.io/instance=$RELEASE_NAME -n $NAMESPACE
+    echo ""
 
-echo -e "${YELLOW}Persistent Volume Claims:${NC}"
-kubectl get pvc
-echo ""
+    echo -e "${YELLOW}Ingress:${NC}"
+    kubectl get ingress -l app.kubernetes.io/instance=$RELEASE_NAME -n $NAMESPACE
+    echo ""
 
-echo -e "${GREEN}========================================${NC}"
-echo -e "${GREEN}Deployment completed successfully!${NC}"
-echo -e "${GREEN}========================================${NC}"
-echo ""
-echo -e "${BLUE}Access the application:${NC}"
-echo -e "- For Minikube: Run 'minikube service client-service' or 'minikube tunnel'"
-echo -e "- Then open: http://localhost"
-echo ""
-echo -e "${BLUE}Useful commands:${NC}"
-echo -e "- View logs: kubectl logs -l app=task-management --all-containers=true"
-echo -e "- Restart deployment: kubectl rollout restart deployment/server-deployment"
-echo -e "- Delete all: kubectl delete all -l app=task-management"
-echo ""
+    echo -e "${GREEN}========================================${NC}"
+    echo -e "${GREEN}Deployment completed successfully!${NC}"
+    echo -e "${GREEN}========================================${NC}"
+    echo ""
+    echo -e "${BLUE}Access the application:${NC}"
+    echo -e "- For Minikube: Run 'minikube tunnel'"
+    echo -e "- Then open: http://localhost"
+    echo ""
+    echo -e "${BLUE}Useful commands:${NC}"
+    echo -e "- View logs: kubectl logs -l app.kubernetes.io/instance=$RELEASE_NAME -n $NAMESPACE --all-containers=true"
+    echo -e "- Upgrade: ./scripts/deploy.sh --upgrade"
+    echo -e "- Uninstall: ./scripts/deploy.sh --uninstall"
+    echo -e "- Helm status: helm status $RELEASE_NAME -n $NAMESPACE"
+    echo ""
+fi
