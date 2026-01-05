@@ -19,8 +19,8 @@ spec:
     spec:
       containers:
       - name: client
-        image: your-registry/task-management-client:latest
-        imagePullPolicy: Always
+        image: taskmanagement-client:latest
+        imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 3000
           name: http

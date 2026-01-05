@@ -1,0 +1,194 @@
+# Default values for task-management
+# This is a YAML-formatted file.
+
+# Global configuration
+global:
+  imageRegistry: ""
+  imagePullSecrets: []
+
+# Namespace
+namespace: default
+
+# Client (React Frontend) configuration
+client:
+  enabled: true
+  replicaCount: 2
+  
+  image:
+    repository: taskmanagement-client
+    tag: latest
+    pullPolicy: IfNotPresent
+  
+  service:
+    type: ClusterIP
+    port: 3000
+    targetPort: 3000
+  
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+    limits:
+      memory: "256Mi"
+      cpu: "250m"
+  
+  env:
+    REACT_APP_API_URL: "/api"
+    NODE_ENV: "production"
+  
+  probes:
+    liveness:
+      path: /health
+      initialDelaySeconds: 15
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 3
+    readiness:
+      path: /health
+      initialDelaySeconds: 5
+      periodSeconds: 5
+      timeoutSeconds: 3
+      failureThreshold: 2
+  
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 80
+
+# Server (Node.js Backend) configuration
+server:
+  enabled: true
+  replicaCount: 2
+  
+  image:
+    repository: taskmanagement-server
+    tag: latest
+    pullPolicy: IfNotPresent
+  
+  service:
+    type: ClusterIP
+    port: 4000
+    targetPort: 4000
+  
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "250m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+  
+  env:
+    PORT: "4000"
+    NODE_ENV: "production"
+    ALLOWED_ORIGINS: "http://localhost,http://localhost:3000"
+  
+  # Secret values (base64 encoded in production)
+  secrets:
+    jwtSecret: "your-super-secret-jwt-key-change-in-production"
+  
+  probes:
+    liveness:
+      path: /
+      initialDelaySeconds: 30
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 3
+    readiness:
+      path: /
+      initialDelaySeconds: 10
+      periodSeconds: 5
+      timeoutSeconds: 3
+      failureThreshold: 3
+  
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 80
+
+# MongoDB configuration (using Bitnami chart or custom)
+mongodb:
+  enabled: true
+  # Set to false to use external MongoDB
+  useBuiltIn: true
+  
+  # Built-in MongoDB settings
+  architecture: standalone
+  
+  auth:
+    enabled: false
+    # rootPassword: ""
+    # database: taskmanagement
+    # username: ""
+    # password: ""
+  
+  persistence:
+    enabled: true
+    size: 5Gi
+    storageClass: ""
+  
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "500m"
+    limits:
+      memory: "1Gi"
+      cpu: "1000m"
+  
+  # External MongoDB URI (if mongodb.enabled is false)
+  externalUri: ""
+
+# Ingress configuration
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+  hosts:
+    - host: ""
+      paths:
+        - path: /api
+          pathType: Prefix
+          service: server
+        - path: /
+          pathType: Prefix
+          service: client
+  tls: []
+  #  - secretName: task-management-tls
+  #    hosts:
+  #      - task-management.local
+
+# Service Account
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+# Pod Security Context
+podSecurityContext:
+  fsGroup: 1001
+
+# Security Context
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1001
+
+# Node Selector
+nodeSelector: {}
+
+# Tolerations
+tolerations: []
+
+# Affinity
+affinity: {}
+
+# Monitoring configuration
+monitoring:
+  enabled: false
+  prometheus:
+    scrape: true
+    port: 4000
+    path: /metrics

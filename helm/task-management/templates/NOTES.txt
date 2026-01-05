@@ -1,0 +1,50 @@
+🎉 Task Management Application has been deployed!
+
+{{- if .Values.ingress.enabled }}
+Application URL:
+{{- range $host := .Values.ingress.hosts }}
+  {{- if $host.host }}
+  http{{ if $.Values.ingress.tls }}s{{ end }}://{{ $host.host }}
+  {{- else }}
+  Access via Ingress Controller IP/LoadBalancer
+  {{- end }}
+{{- end }}
+{{- else }}
+Get the application URL by running:
+  kubectl port-forward svc/{{ include "task-management.fullname" . }}-client 3000:{{ .Values.client.service.port }}
+  
+Then open: http://localhost:3000
+{{- end }}
+
+📦 Deployed Components:
+{{- if .Values.client.enabled }}
+  ✅ Client (React Frontend) - {{ .Values.client.replicaCount }} replica(s)
+{{- end }}
+{{- if .Values.server.enabled }}
+  ✅ Server (Node.js Backend) - {{ .Values.server.replicaCount }} replica(s)
+{{- end }}
+{{- if and .Values.mongodb.enabled .Values.mongodb.useBuiltIn }}
+  ✅ MongoDB Database - 1 replica
+{{- end }}
+
+🔧 Useful Commands:
+
+  # Check deployment status
+  kubectl get pods -l app.kubernetes.io/instance={{ .Release.Name }}
+
+  # View logs
+  kubectl logs -l app.kubernetes.io/instance={{ .Release.Name }} --all-containers=true -f
+
+  # Restart deployments
+  kubectl rollout restart deployment -l app.kubernetes.io/instance={{ .Release.Name }}
+
+  # Upgrade the release
+  helm upgrade {{ .Release.Name }} ./helm/task-management
+
+  # Uninstall
+  helm uninstall {{ .Release.Name }}
+
+{{- if .Values.monitoring.enabled }}
+📊 Monitoring is enabled! Access metrics at:
+  Server metrics: http://{{ include "task-management.fullname" . }}-server:{{ .Values.monitoring.prometheus.port }}{{ .Values.monitoring.prometheus.path }}
+{{- end }}

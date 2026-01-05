@@ -1,0 +1,28 @@
+{{- if .Values.client.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "task-management.fullname" . }}-client-config
+  labels:
+    {{- include "task-management.labels" . | nindent 4 }}
+    component: client
+data:
+  {{- range $key, $value := .Values.client.env }}
+  {{ $key }}: {{ $value | quote }}
+  {{- end }}
+{{- end }}
+---
+{{- if .Values.server.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "task-management.fullname" . }}-server-config
+  labels:
+    {{- include "task-management.labels" . | nindent 4 }}
+    component: server
+data:
+  {{- range $key, $value := .Values.server.env }}
+  {{ $key }}: {{ $value | quote }}
+  {{- end }}
+  MONGODB_URI: {{ include "task-management.mongodbUri" . | quote }}
+{{- end }}

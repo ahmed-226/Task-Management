@@ -1,0 +1,19 @@
+{{- if .Values.client.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "task-management.fullname" . }}-client
+  labels:
+    {{- include "task-management.labels" . | nindent 4 }}
+    component: client
+spec:
+  type: {{ .Values.client.service.type }}
+  ports:
+    - port: {{ .Values.client.service.port }}
+      targetPort: {{ .Values.client.service.targetPort }}
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "task-management.selectorLabels" . | nindent 4 }}
+    component: client
+{{- end }}

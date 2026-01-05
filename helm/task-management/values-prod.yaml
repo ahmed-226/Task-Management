@@ -1,0 +1,127 @@
+# Production environment values
+# Usage: helm install task-management ./helm/task-management -f helm/task-management/values-prod.yaml
+
+# Override for production
+global:
+  imageRegistry: "your-registry.azurecr.io/"
+  imagePullSecrets:
+    - name: registry-secret
+
+client:
+  replicaCount: 3
+  image:
+    repository: taskmanagement-client
+    tag: "1.0.0"
+    pullPolicy: IfNotPresent
+  
+  env:
+    REACT_APP_API_URL: "/api"
+    NODE_ENV: "production"
+  
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+    limits:
+      memory: "256Mi"
+      cpu: "250m"
+  
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+
+server:
+  replicaCount: 3
+  image:
+    repository: taskmanagement-server
+    tag: "1.0.0"
+    pullPolicy: IfNotPresent
+  
+  env:
+    PORT: "4000"
+    NODE_ENV: "production"
+    ALLOWED_ORIGINS: "https://your-domain.com"
+  
+  secrets:
+    # IMPORTANT: Replace with a strong secret in production
+    # Generate with: openssl rand -hex 32
+    jwtSecret: "REPLACE_WITH_STRONG_SECRET_IN_PRODUCTION"
+  
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "250m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+  
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 15
+    targetCPUUtilizationPercentage: 70
+
+mongodb:
+  enabled: true
+  useBuiltIn: true
+  auth:
+    enabled: true
+    rootPassword: "REPLACE_WITH_STRONG_PASSWORD"
+    database: taskmanagement
+    username: taskmanagement
+    password: "REPLACE_WITH_STRONG_PASSWORD"
+  persistence:
+    enabled: true
+    size: 20Gi
+    storageClass: "managed-premium"
+  resources:
+    requests:
+      memory: "1Gi"
+      cpu: "500m"
+    limits:
+      memory: "2Gi"
+      cpu: "1000m"
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+  hosts:
+    - host: "your-domain.com"
+      paths:
+        - path: /api
+          pathType: Prefix
+          service: server
+        - path: /
+          pathType: Prefix
+          service: client
+  tls:
+    - secretName: task-management-tls
+      hosts:
+        - your-domain.com
+
+monitoring:
+  enabled: true
+  prometheus:
+    scrape: true
+    port: 4000
+    path: /metrics
+
+# Production node affinity
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  - task-management
+          topologyKey: kubernetes.io/hostname

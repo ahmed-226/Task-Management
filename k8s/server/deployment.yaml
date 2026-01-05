@@ -19,8 +19,8 @@ spec:
     spec:
       containers:
       - name: server
-        image: your-registry/task-management-server:latest
-        imagePullPolicy: Always
+        image: taskmanagement-server:latest
+        imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 4000
           name: http

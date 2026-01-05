@@ -1,0 +1,19 @@
+{{- if .Values.server.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "task-management.fullname" . }}-server
+  labels:
+    {{- include "task-management.labels" . | nindent 4 }}
+    component: server
+spec:
+  type: {{ .Values.server.service.type }}
+  ports:
+    - port: {{ .Values.server.service.port }}
+      targetPort: {{ .Values.server.service.targetPort }}
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "task-management.selectorLabels" . | nindent 4 }}
+    component: server
+{{- end }}

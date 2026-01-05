@@ -1,0 +1,72 @@
+# Development environment values
+# Usage: helm install task-management ./helm/task-management -f helm/task-management/values-dev.yaml
+
+# Override for development
+global:
+  imageRegistry: ""
+
+client:
+  replicaCount: 1
+  image:
+    repository: taskmanagement-client
+    tag: latest
+    pullPolicy: Always
+  
+  env:
+    REACT_APP_API_URL: "/api"
+    NODE_ENV: "development"
+  
+  resources:
+    requests:
+      memory: "64Mi"
+      cpu: "50m"
+    limits:
+      memory: "128Mi"
+      cpu: "100m"
+
+server:
+  replicaCount: 1
+  image:
+    repository: taskmanagement-server
+    tag: latest
+    pullPolicy: Always
+  
+  env:
+    PORT: "4000"
+    NODE_ENV: "development"
+    ALLOWED_ORIGINS: "http://localhost,http://localhost:3000,http://127.0.0.1:3000"
+  
+  secrets:
+    jwtSecret: "dev-secret-change-in-production"
+  
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+    limits:
+      memory: "256Mi"
+      cpu: "250m"
+
+mongodb:
+  enabled: true
+  useBuiltIn: true
+  auth:
+    enabled: false
+  persistence:
+    enabled: true
+    size: 1Gi
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+  hosts:
+    - host: ""
+      paths:
+        - path: /api
+          pathType: Prefix
+          service: server
+        - path: /
+          pathType: Prefix
+          service: client
